@@ -1,0 +1,1683 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Organizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to right, #e6f0fa, #e3e7ff);
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #4f46e5;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        #menu-toggle {
+            font-size: 24px;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+        #menu-toggle:hover {
+            color: #c7d2fe;
+        }
+        #drawer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 200px;
+            height: 100%;
+            background-color: #5a5ae8;
+            color: white;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 20;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+        }
+        #drawer .p-4 {
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            border-bottom: 1px solid #a5b4fc;
+        }
+        #drawer nav ul li button {
+            width: 100%;
+            text-align: left;
+            padding: 15px;
+            font-size: 16px;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+        #drawer nav ul li button:hover,
+        #drawer nav ul li button:focus {
+            background-color: #6366f1;
+        }
+        #drawer .p-4 button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: none;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        #drawer .p-4 button.bg-green {
+            background-color: #10b981;
+        }
+        #drawer .p-4 button.bg-green:hover {
+            background-color: #059669;
+        }
+        #drawer .p-4 button.bg-yellow {
+            background-color: #f59e0b;
+        }
+        #drawer .p-4 button.bg-yellow:hover {
+            background-color: #d97706;
+        }
+        #drawer .p-4 button.bg-red {
+            background-color: #ef4444;
+        }
+        #drawer .p-4 button.bg-red:hover {
+            background-color: #dc2626;
+        }
+        .tabs {
+            background-color: #e0e7ff;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-bottom: 1px solid #a5b4fc;
+        }
+        .tabs button {
+            padding: 8px 16px;
+            border-radius: 5px 5px 0 0;
+            border: 1px solid #a5b4fc;
+            border-bottom: none;
+            background-color: #c7d2fe;
+            color: #4f46e5;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .tabs button.active {
+            background-color: white;
+            color: #4f46e5;
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+        main {
+            padding: 20px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+        }
+        .tab-content.active {
+            display: flex;
+        }
+        h1 {
+            font-size: 28px;
+            color: #4f46e5;
+            margin-bottom: 20px;
+        }
+        .dropdown {
+            position: relative;
+        }
+        .dropdown button {
+            background-color: #4f46e5;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+        }
+        .dropdown button:hover {
+            background-color: #4338ca;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            margin-top: 5px;
+            width: 150px;
+            background-color: white;
+            border: 1px solid #a5b4fc;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+        .dropdown-content button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px;
+            background: none;
+            border: none;
+            color: #4f46e5;
+            cursor: pointer;
+        }
+        .dropdown-content button:hover {
+            background-color: #e0e7ff;
+        }
+        .form-container {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #a5b4fc;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-container h2 {
+            font-size: 18px;
+            color: #4f46e5;
+            margin-bottom: 10px;
+        }
+        .form-container input,
+        .form-container select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #a5b4fc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .form-container button {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+        .form-container button.bg-indigo {
+            background-color: #4f46e5;
+        }
+        .form-container button.bg-indigo:hover {
+            background-color: #4338ca;
+        }
+        .form-container button.bg-green {
+            background-color: #10b981;
+        }
+        .form-container button.bg-green:hover {
+            background-color: #059669;
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .filters input,
+        .filters select,
+        .filters button {
+            padding: 8px;
+            border: 1px solid #a5b4fc;
+            border-radius: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .filters button {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .filters button:hover {
+            background-color: #4338ca;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        table thead {
+            background-color: #e0e7ff;
+        }
+        table th,
+        table td {
+            padding: 10px;
+            border: 1px solid #a5b4fc;
+            text-align: left;
+            font-size: 14px;
+        }
+        table th {
+            color: #4f46e5;
+            font-weight: bold;
+        }
+        table tbody tr:hover {
+            background-color: #f3f4ff;
+        }
+        table tbody td button {
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: none;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        table tbody td button.bg-yellow {
+            background-color: #f59e0b;
+        }
+        table tbody td button.bg-yellow:hover {
+            background-color: #d97706;
+        }
+        table tbody td button.bg-red {
+            background-color: #ef4444;
+        }
+        table tbody td button.bg-red:hover {
+            background-color: #dc2626;
+        }
+        table tbody td button.bg-green {
+            background-color: #10b981;
+        }
+        table tbody td button.bg-green:hover {
+            background-color: #059669;
+        }
+        .priority-high {
+            color: #ef4444;
+        }
+        .priority-medium {
+            color: #f59e0b;
+        }
+        .priority-low {
+            color: #10b981;
+        }
+        .date-past {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .date-today {
+            color: #f59e0b;
+            font-weight: bold;
+        }
+        .completed {
+            text-decoration: line-through;
+            color: #6b7280;
+        }
+        .summary {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #a5b4fc;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .summary p {
+            font-weight: bold;
+            color: #4f46e5;
+            margin: 5px 0;
+        }
+        footer {
+            text-align: center;
+            color: #4f46e5;
+            padding: 15px 0;
+            font-size: 14px;
+        }
+        .prompt {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            color: white;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            z-index: 1000;
+        }
+        .prompt.success {
+            background-color: #10b981;
+        }
+        .prompt.error {
+            background-color: #ef4444;
+        }
+        .prompt.show {
+            opacity: 1;
+        }
+        @media (max-width: 640px) {
+            header h1 {
+                font-size: 20px;
+            }
+            #menu-toggle {
+                font-size: 20px;
+            }
+            #drawer {
+                width: 180px;
+            }
+            #drawer .p-4 {
+                padding: 10px;
+                font-size: 16px;
+            }
+            #drawer nav ul li button {
+                padding: 10px;
+                font-size: 14px;
+            }
+            #drawer .p-4 button {
+                padding: 8px;
+                font-size: 12px;
+            }
+            .tabs button {
+                padding: 6px 12px;
+                font-size: 14px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            .form-container {
+                padding: 10px;
+            }
+            .form-container h2 {
+                font-size: 16px;
+            }
+            .form-container input,
+            .form-container select,
+            .form-container button {
+                padding: 6px;
+                font-size: 14px;
+            }
+            .filters input,
+            .filters select,
+            .filters button {
+                padding: 6px;
+                font-size: 14px;
+            }
+            table th,
+            table td {
+                padding: 8px;
+                font-size: 12px;
+            }
+            table tbody td button {
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+            .summary {
+                padding: 10px;
+            }
+            .summary p {
+                font-size: 14px;
+            }
+            footer {
+                font-size: 12px;
+            }
+            .prompt {
+                font-size: 12px;
+                padding: 8px 16px;
+                bottom: 10px;
+                right: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="flex flex-col min-h-screen">
+        <!-- Header with Hamburger Menu -->
+        <header>
+            <div class="flex items-center">
+                <button id="menu-toggle">☰</button>
+                <h1>Personal Organizer</h1>
+            </div>
+        </header>
+
+        <!-- Drawer -->
+        <div id="drawer">
+            <div class="p-4">Menu</div>
+            <nav>
+                <ul>
+                    <li>
+                        <button onclick="showTab('expense')">Expense Tracker</button>
+                    </li>
+                    <li>
+                        <button onclick="showTab('todo')">To-Do List</button>
+                    </li>
+                    <li>
+                        <button onclick="showTab('shopping')">Shopping List</button>
+                    </li>
+                </ul>
+            </nav>
+            <div class="p-4">
+                <button onclick="clearAllData()" class="bg-red">Clear All Data</button>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button id="expense-tab" onclick="showTab('expense')" class="active">Expense Tracker</button>
+            <button id="todo-tab" onclick="showTab('todo')">To-Do List</button>
+            <button id="shopping-tab" onclick="showTab('shopping')">Shopping List</button>
+        </div>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Expense Tracker Tab -->
+            <div id="expense-page" class="tab-content active">
+                <div class="flex justify-between items-center mb-6">
+                    <h1>Expense Tracker</h1>
+                    <div class="dropdown">
+                        <button onclick="toggleDropdown('expense-dropdown')">Import/Export</button>
+                        <div id="expense-dropdown" class="dropdown-content">
+                            <button onclick="exportToCSV('expense')">Export to CSV</button>
+                            <button onclick="exportToExcel('expense')">Export to Excel</button>
+                            <input type="file" id="expense-import" accept=".csv" class="hidden" onchange="importCSV('expense', event)">
+                            <button onclick="document.getElementById('expense-import').click()">Import from CSV</button>
+                            <button onclick="backupData('expense')" class="bg-green">Backup</button>
+                            <input type="file" id="expense-restore" accept=".json" class="hidden" onchange="restoreData('expense', event)">
+                            <button onclick="document.getElementById('expense-restore').click()" class="bg-yellow">Restore</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row sm:space-x-6 space-y-4 sm:space-y-0 mb-6">
+                    <div class="form-container flex-1">
+                        <h2>Add/Edit Expense</h2>
+                        <input id="expense-desc" type="text" placeholder="Description">
+                        <input id="expense-amount" type="number" placeholder="Amount">
+                        <input id="expense-date" type="date">
+                        <button id="expense-btn" onclick="handleExpenseSubmit()" class="bg-indigo">Add Expense</button>
+                        <input id="expense-edit-index" type="hidden" value="-1">
+                    </div>
+                    <div class="form-container flex-1">
+                        <h2>Add/Edit Income</h2>
+                        <input id="income-desc" type="text" placeholder="Description">
+                        <input id="income-amount" type="number" placeholder="Amount">
+                        <input id="income-date" type="date">
+                        <button id="income-btn" onclick="handleIncomeSubmit()" class="bg-green">Add Income</button>
+                        <input id="income-edit-index" type="hidden" value="-1">
+                    </div>
+                </div>
+                <div class="form-container mb-6">
+                    <h2>Set Monthly Budget</h2>
+                    <input id="monthly-budget" type="number" placeholder="Enter budget (NRs)">
+                    <button onclick="setBudget()" class="bg-indigo">Set Budget</button>
+                    <p>Current Budget: NRs <span id="current-budget">0</span></p>
+                </div>
+                <div class="filters mb-6">
+                    <input id="expense-search" type="text" placeholder="Search by description...">
+                    <select id="expense-filter">
+                        <option value="all">All</option>
+                        <option value="expense">Expenses</option>
+                        <option value="income">Income</option>
+                    </select>
+                    <button id="expense-sort-date" onclick="sortExpensesByDate()">Sort by Date ↓</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Amount (NRs)</th>
+                                <th>Date</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expense-table"></tbody>
+                    </table>
+                </div>
+                <div class="summary">
+                    <p>Total Expenses: NRs <span id="expense-total">0</span></p>
+                    <p>Total Income: NRs <span id="income-total">0</span></p>
+                    <p>Balance: NRs <span id="balance">0</span></p>
+                </div>
+                <footer>Software designed by Santosh Phuyal</footer>
+            </div>
+
+            <!-- To-Do List Tab -->
+            <div id="todo-page" class="tab-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h1>To-Do List</h1>
+                    <div class="dropdown">
+                        <button onclick="toggleDropdown('todo-dropdown')">Import/Export</button>
+                        <div id="todo-dropdown" class="dropdown-content">
+                            <button onclick="exportToCSV('todo')">Export to CSV</button>
+                            <button onclick="exportToExcel('todo')">Export to Excel</button>
+                            <input type="file" id="todo-import" accept=".csv" class="hidden" onchange="importCSV('todo', event)">
+                            <button onclick="document.getElementById('todo-import').click()">Import from CSV</button>
+                            <button onclick="backupData('todo')" class="bg-green">Backup</button>
+                            <input type="file" id="todo-restore" accept=".json" class="hidden" onchange="restoreData('todo', event)">
+                            <button onclick="document.getElementById('todo-restore').click()" class="bg-yellow">Restore</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-container mb-6">
+                    <input id="todo-task" type="text" placeholder="Enter task">
+                    <input id="todo-date" type="date">
+                    <input id="todo-reminder" type="datetime-local">
+                    <select id="todo-category">
+                        <option value="Personal">Personal</option>
+                        <option value="Work">Work</option>
+                        <option value="Urgent">Urgent</option>
+                    </select>
+                    <select id="todo-priority">
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                    <label><input id="todo-completed" type="checkbox"> Completed</label>
+                    <button id="todo-btn" onclick="handleTodoSubmit()" class="bg-indigo">Add Task</button>
+                    <input id="todo-edit-index" type="hidden" value="-1">
+                </div>
+                <div class="filters mb-6">
+                    <input id="todo-search" type="text" placeholder="Search by task...">
+                    <select id="todo-filter-category">
+                        <option value="all">All Categories</option>
+                        <option value="Personal">Personal</option>
+                        <option value="Work">Work</option>
+                        <option value="Urgent">Urgent</option>
+                    </select>
+                    <select id="todo-filter-priority">
+                        <option value="all">All Priorities</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                    <select id="todo-filter-completed">
+                        <option value="all">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="incomplete">Incomplete</option>
+                    </select>
+                    <button id="todo-sort-date" onclick="sortTodosByDate()">Sort by Date ↓</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Task</th>
+                                <th>Date</th>
+                                <th>Reminder</th>
+                                <th>Category</th>
+                                <th>Priority</th>
+                                <th>Completed</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="todo-table"></tbody>
+                    </table>
+                </div>
+                <footer>Software designed by Santosh Phuyal</footer>
+            </div>
+
+            <!-- Shopping List Tab -->
+            <div id="shopping-page" class="tab-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h1>Shopping List</h1>
+                    <div class="dropdown">
+                        <button onclick="toggleDropdown('shopping-dropdown')">Import/Export</button>
+                        <div id="shopping-dropdown" class="dropdown-content">
+                            <button onclick="exportToCSV('shopping')">Export to CSV</button>
+                            <button onclick="exportToExcel('shopping')">Export to Excel</button>
+                            <input type="file" id="shopping-import" accept=".csv" class="hidden" onchange="importCSV('shopping', event)">
+                            <button onclick="document.getElementById('shopping-import').click()">Import from CSV</button>
+                            <button onclick="backupData('shopping')" class="bg-green">Backup</button>
+                            <input type="file" id="shopping-restore" accept=".json" class="hidden" onchange="restoreData('shopping', event)">
+                            <button onclick="document.getElementById('shopping-restore').click()" class="bg-yellow">Restore</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-container mb-6">
+                    <input id="shopping-item" type="text" placeholder="Enter item">
+                    <input id="shopping-date" type="date">
+                    <select id="shopping-category">
+                        <option value="Personal">Personal</option>
+                        <option value="Work">Work</option>
+                        <option value="Urgent">Urgent</option>
+                    </select>
+                    <select id="shopping-priority">
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                    <button id="shopping-btn" onclick="handleShoppingSubmit()" class="bg-indigo">Add Item</button>
+                    <input id="shopping-edit-index" type="hidden" value="-1">
+                </div>
+                <div class="filters mb-6">
+                    <input id="shopping-search" type="text" placeholder="Search by item...">
+                    <select id="shopping-filter-category">
+                        <option value="all">All Categories</option>
+                        <option value="Personal">Personal</option>
+                        <option value="Work">Work</option>
+                        <option value="Urgent">Urgent</option>
+                    </select>
+                    <select id="shopping-filter-priority">
+                        <option value="all">All Priorities</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                    <select id="shopping-filter-completed">
+                        <option value="all">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="incomplete">Incomplete</option>
+                    </select>
+                    <button id="shopping-sort-date" onclick="sortShoppingByDate()">Sort by Date ↓</button>
+                </div>
+                <div class="summary mb-6">
+                    <p>Total Items: <span id="shopping-total">0</span></p>
+                    <p>Completed Items: <span id="shopping-completed">0</span></p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Priority</th>
+                                <th>Completed</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shopping-table"></tbody>
+                    </table>
+                </div>
+                <footer>Software designed by Santosh Phuyal</footer>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Utility: Sanitize HTML to prevent XSS
+        function sanitizeHTML(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Utility: Show Prompt
+        function showPrompt(message, type = 'success') {
+            const prompt = document.createElement('div');
+            prompt.className = `prompt ${type} show`;
+            prompt.textContent = message;
+            document.body.appendChild(prompt);
+            setTimeout(() => {
+                prompt.classList.remove('show');
+                setTimeout(() => prompt.remove(), 300);
+            }, 3000);
+        }
+
+        // Utility: Get current date for filenames and default date picker (YYYY-MM-DD)
+        function getCurrentDate() {
+            const today = new Date();
+            return today.toISOString().split('T')[0];
+        }
+
+        // Set default dates for pickers
+        document.getElementById('expense-date').value = getCurrentDate();
+        document.getElementById('income-date').value = getCurrentDate();
+        document.getElementById('todo-date').value = getCurrentDate();
+        document.getElementById('shopping-date').value = getCurrentDate();
+
+        // Drawer Toggle
+        const drawer = document.getElementById('drawer');
+        const menuToggle = document.getElementById('menu-toggle');
+        menuToggle.addEventListener('click', () => {
+            drawer.classList.toggle('-translate-x-full');
+        });
+
+        // Tab Navigation
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(page => {
+                page.classList.remove('active');
+            });
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tabs button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            // Show the selected tab
+            const selectedTab = document.getElementById(`${tabId}-page`);
+            selectedTab.classList.add('active');
+            // Set the active tab button
+            const activeTabBtn = document.getElementById(`${tabId}-tab`);
+            activeTabBtn.classList.add('active');
+            closeAllDropdowns();
+            drawer.classList.add('-translate-x-full');
+            resetForms();
+        }
+
+        // Reset Forms
+        function resetForms() {
+            document.getElementById('expense-desc').value = '';
+            document.getElementById('expense-amount').value = '';
+            document.getElementById('expense-date').value = getCurrentDate();
+            document.getElementById('expense-btn').textContent = 'Add Expense';
+            document.getElementById('expense-edit-index').value = '-1';
+            document.getElementById('expense-search').value = '';
+            document.getElementById('expense-filter').value = 'all';
+            document.getElementById('expense-sort-date').textContent = 'Sort by Date ↓';
+            expenseSortDirection = 'desc';
+            document.getElementById('income-desc').value = '';
+            document.getElementById('income-amount').value = '';
+            document.getElementById('income-date').value = getCurrentDate();
+            document.getElementById('income-btn').textContent = 'Add Income';
+            document.getElementById('income-edit-index').value = '-1';
+            document.getElementById('todo-task').value = '';
+            document.getElementById('todo-date').value = getCurrentDate();
+            document.getElementById('todo-reminder').value = '';
+            document.getElementById('todo-category').value = 'Personal';
+            document.getElementById('todo-priority').value = 'Low';
+            document.getElementById('todo-completed').checked = false;
+            document.getElementById('todo-btn').textContent = 'Add Task';
+            document.getElementById('todo-edit-index').value = '-1';
+            document.getElementById('todo-search').value = '';
+            document.getElementById('todo-filter-category').value = 'all';
+            document.getElementById('todo-filter-priority').value = 'all';
+            document.getElementById('todo-filter-completed').value = 'all';
+            document.getElementById('todo-sort-date').textContent = 'Sort by Date ↓';
+            todoSortDirection = 'desc';
+            document.getElementById('shopping-item').value = '';
+            document.getElementById('shopping-date').value = getCurrentDate();
+            document.getElementById('shopping-category').value = 'Personal';
+            document.getElementById('shopping-priority').value = 'Low';
+            document.getElementById('shopping-btn').textContent = 'Add Item';
+            document.getElementById('shopping-edit-index').value = '-1';
+            document.getElementById('shopping-search').value = '';
+            document.getElementById('shopping-filter-category').value = 'all';
+            document.getElementById('shopping-filter-priority').value = 'all';
+            document.getElementById('shopping-filter-completed').value = 'all';
+            document.getElementById('shopping-sort-date').textContent = 'Sort by Date ↓';
+            shoppingSortDirection = 'desc';
+            renderExpenses();
+            renderTodos();
+            renderShoppingList();
+        }
+
+        // Dropdown Toggle
+        function toggleDropdown(dropdownId) {
+            const dropdown = document.getElementById(dropdownId);
+            const isOpen = dropdown.style.display === 'block';
+            closeAllDropdowns();
+            if (!isOpen) {
+                dropdown.style.display = 'block';
+            }
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.dropdown-content').forEach(dropdown => {
+                dropdown.style.display = 'none';
+            });
+        }
+
+        // Export to CSV
+        function exportToCSV(type) {
+            let data, headers, filename;
+            if (type === 'expense') {
+                data = [
+                    ...expenses.map(item => ({ type: 'Expense', desc: item.desc, amount: item.amount, date: item.date })),
+                    ...incomes.map(item => ({ type: 'Income', desc: item.desc, amount: item.amount, date: item.date }))
+                ];
+                headers = ['Type', 'Description', 'Amount', 'Date'];
+                filename = `finances_${getCurrentDate()}.csv`;
+            } else if (type === 'todo') {
+                data = todos;
+                headers = ['Task', 'Completed', 'Date', 'Reminder', 'Category', 'Priority'];
+                filename = `todos_${getCurrentDate()}.csv`;
+            } else if (type === 'shopping') {
+                data = shoppingList;
+                headers = ['Item', 'Date', 'Completed', 'Category', 'Priority'];
+                filename = `shopping_${getCurrentDate()}.csv`;
+            }
+
+            let csv = headers.join(',') + '\n';
+            data.forEach(row => {
+                const values = type === 'expense' ? [row.type, row.desc, row.amount, row.date] :
+                               type === 'todo' ? [row.task, row.completed, row.date, row.reminder || '', row.category, row.priority] :
+                               [row.item, row.date, row.completed, row.category, row.priority];
+                csv += values.map(v => `"${v}"`).join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            showPrompt(`${type.charAt(0).toUpperCase() + type.slice(1)} exported to CSV!`);
+        }
+
+        // Export to Excel
+        function exportToExcel(type) {
+            let data, filename;
+            if (type === 'expense') {
+                data = [
+                    ...expenses.map(item => ({ Type: 'Expense', Description: item.desc, Amount: item.amount, Date: item.date })),
+                    ...incomes.map(item => ({ Type: 'Income', Description: item.desc, Amount: item.amount, Date: item.date }))
+                ];
+                filename = `finances_${getCurrentDate()}.xlsx`;
+            } else if (type === 'todo') {
+                data = todos.map(row => ({ Task: row.task, Completed: row.completed, Date: row.date, Reminder: row.reminder || '', Category: row.category, Priority: row.priority }));
+                filename = `todos_${getCurrentDate()}.xlsx`;
+            } else if (type === 'shopping') {
+                data = shoppingList.map(item => ({ Item: item.item, Date: item.date, Completed: item.completed, Category: item.category, Priority: item.priority }));
+                filename = `shopping_${getCurrentDate()}.xlsx`;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, type.charAt(0).toUpperCase() + type.slice(1));
+            XLSX.writeFile(wb, filename);
+            showPrompt(`${type.charAt(0).toUpperCase() + type.slice(1)} exported to Excel!`);
+        }
+
+        // Import from CSV
+        function importCSV(type, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const rows = text.split('\n').map(row => row.split(',').map(v => v.replace(/^"|"$/g, '').trim()));
+                const headers = rows.shift().map(h => h.toLowerCase().trim());
+                if (type === 'expense' && headers.join(',') === 'type,description,amount,date') {
+                    expenses = rows
+                        .filter(row => row.length === 4 && row[0].toLowerCase() === 'expense' && row[1] && !isNaN(row[2]) && isValidDate(row[3]))
+                        .map(row => ({ desc: row[1], amount: parseFloat(row[2]), date: row[3] }));
+                    incomes = rows
+                        .filter(row => row.length === 4 && row[0].toLowerCase() === 'income' && row[1] && !isNaN(row[2]) && isValidDate(row[3]))
+                        .map(row => ({ desc: row[1], amount: parseFloat(row[2]), date: row[3] }));
+                    localStorage.setItem('expenses', JSON.stringify(expenses));
+                    localStorage.setItem('incomes', JSON.stringify(incomes));
+                    renderExpenses();
+                    showPrompt('Expenses and incomes imported successfully!');
+                } else if (type === 'todo' && headers.join(',') === 'task,completed,date,reminder,category,priority') {
+                    todos = rows
+                        .filter(row => row.length === 6 && row[0] && row[0].trim() && isValidDate(row[2]))
+                        .map(row => ({
+                            task: row[0].trim(),
+                            completed: row[1].toLowerCase() === 'true' || row[1].toLowerCase() === 'yes',
+                            date: row[2],
+                            reminder: row[3] && isValidDateTime(row[3]) ? row[3] : null,
+                            category: ['personal', 'work', 'urgent'].includes(row[4].toLowerCase()) ? 
+                                      row[4].charAt(0).toUpperCase() + row[4].slice(1).toLowerCase() : 'Personal',
+                            priority: ['low', 'medium', 'high'].includes(row[5].toLowerCase()) ? 
+                                      row[5].charAt(0).toUpperCase() + row[5].slice(1).toLowerCase() : 'Low'
+                        }));
+                    localStorage.setItem('todos', JSON.stringify(todos));
+                    renderTodos();
+                    showPrompt('To-do list imported successfully!');
+                } else if (type === 'shopping' && headers.join(',') === 'item,date,completed,category,priority') {
+                    shoppingList = rows
+                        .filter(row => row.length === 5 && row[0] && row[0].trim() && isValidDate(row[1]))
+                        .map(row => ({
+                            item: row[0].trim(),
+                            date: row[1],
+                            completed: row[1].toLowerCase() === 'true' || row[1].toLowerCase() === 'yes',
+                            category: ['personal', 'work', 'urgent'].includes(row[3].toLowerCase()) ? 
+                                      row[3].charAt(0).toUpperCase() + row[3].slice(1).toLowerCase() : 'Personal',
+                            priority: ['low', 'medium', 'high'].includes(row[4].toLowerCase()) ? 
+                                      row[4].charAt(0).toUpperCase() + row[4].slice(1).toLowerCase() : 'Low'
+                        }));
+                    localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+                    renderShoppingList();
+                    showPrompt('Shopping list imported successfully!');
+                } else {
+                    showPrompt('Invalid CSV format. Please check the file.', 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // Validate Date (YYYY-MM-DD)
+        function isValidDate(dateString) {
+            const regex = /^\d{4}-\d{2}-\d{2}$/;
+            if (!regex.test(dateString)) return false;
+            const date = new Date(dateString);
+            return date instanceof Date && !isNaN(date) &&
+                   date.getFullYear() == dateString.split('-')[0] &&
+                   date.getMonth() + 1 == dateString.split('-')[1] &&
+                   date.getDate() == dateString.split('-')[2];
+        }
+
+        // Validate DateTime (YYYY-MM-DDTHH:mm)
+        function isValidDateTime(dateTimeString) {
+            const regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+            if (!regex.test(dateTimeString)) return false;
+            const date = new Date(dateTimeString);
+            return date instanceof Date && !isNaN(date);
+        }
+
+        // Backup Data
+        function backupData(type) {
+            let backup, filename;
+            if (type === 'expense') {
+                backup = { expenses, incomes, budget };
+                filename = `expense_backup_${getCurrentDate()}.json`;
+            } else if (type === 'todo') {
+                backup = { todos };
+                filename = `todo_backup_${getCurrentDate()}.json`;
+            } else if (type === 'shopping') {
+                backup = { shoppingList };
+                filename = `shopping_backup_${getCurrentDate()}.json`;
+            }
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            showPrompt(`${type.charAt(0).toUpperCase() + type.slice(1)} data backed up!`);
+        }
+
+        // Restore Data
+        function restoreData(type, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const backup = JSON.parse(e.target.result);
+                    if (type === 'expense') {
+                        if (backup.expenses && Array.isArray(backup.expenses)) {
+                            const newExpenses = backup.expenses.filter(e => e && e.desc && typeof e.desc === 'string' && typeof e.amount === 'number' && isValidDate(e.date));
+                            expenses = mergeAndRemoveDuplicates(expenses, newExpenses, ['desc', 'date'], (a, b) => a.amount > b.amount ? a : b);
+                            localStorage.setItem('expenses', JSON.stringify(expenses));
+                        }
+                        if (backup.incomes && Array.isArray(backup.incomes)) {
+                            const newIncomes = backup.incomes.filter(i => i && i.desc && typeof i.desc === 'string' && typeof i.amount === 'number' && isValidDate(i.date));
+                            incomes = mergeAndRemoveDuplicates(incomes, newIncomes, ['desc', 'date'], (a, b) => a.amount > b.amount ? a : b);
+                            localStorage.setItem('incomes', JSON.stringify(incomes));
+                        }
+                        if (typeof backup.budget === 'number') {
+                            budget = backup.budget;
+                            localStorage.setItem('budget', budget);
+                            document.getElementById('current-budget').textContent = budget.toFixed(2);
+                        }
+                        renderExpenses();
+                    } else if (type === 'todo') {
+                        if (backup.todos && Array.isArray(backup.todos)) {
+                            const newTodos = backup.todos.filter(t => t && t.task && typeof t.task === 'string' && typeof t.completed === 'boolean' && isValidDate(t.date) && ['Personal', 'Work', 'Urgent'].includes(t.category) && ['Low', 'Medium', 'High'].includes(t.priority));
+                            todos = mergeAndRemoveDuplicates(todos, newTodos, ['task', 'date'], (a, b) => {
+                                const priorityOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                                const aReminder = a.reminder ? new Date(a.reminder) : null;
+                                const bReminder = b.reminder ? new Date(b.reminder) : null;
+                                if (aReminder && bReminder) return aReminder > bReminder ? a : b;
+                                if (aReminder) return a;
+                                if (bReminder) return b;
+                                return priorityOrder[a.priority] > priorityOrder[b.priority] ? a : b;
+                            });
+                            localStorage.setItem('todos', JSON.stringify(todos));
+                        }
+                        renderTodos();
+                    } else if (type === 'shopping') {
+                        if (backup.shoppingList && Array.isArray(backup.shoppingList)) {
+                            const newShoppingList = backup.shoppingList.filter(s => s && s.item && typeof s.item === 'string' && isValidDate(s.date) && typeof s.completed === 'boolean' && ['Personal', 'Work', 'Urgent'].includes(s.category) && ['Low', 'Medium', 'High'].includes(s.priority));
+                            shoppingList = mergeAndRemoveDuplicates(shoppingList, newShoppingList, ['item', 'date'], (a, b) => {
+                                const priorityOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                                return priorityOrder[a.priority] > priorityOrder[b.priority] ? a : b;
+                            });
+                            localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+                        }
+                        renderShoppingList();
+                    }
+                    showPrompt(`${type.charAt(0).toUpperCase() + type.slice(1)} data restored successfully!`);
+                } catch (err) {
+                    showPrompt('Invalid backup file. Please upload a valid JSON file.', 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // Merge and Remove Duplicates
+        function mergeAndRemoveDuplicates(existing, incoming, keyFields, resolveConflict) {
+            const existingMap = new Map();
+            existing.forEach(item => {
+                const key = keyFields.map(field => item[field]).join('|');
+                existingMap.set(key, item);
+            });
+            incoming.forEach(item => {
+                const key = keyFields.map(field => item[field]).join('|');
+                if (existingMap.has(key)) {
+                    existingMap.set(key, resolveConflict(existingMap.get(key), item));
+                } else {
+                    existingMap.set(key, item);
+                }
+            });
+            return Array.from(existingMap.values());
+        }
+
+        // Clear All Data
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
+                expenses = [];
+                incomes = [];
+                todos = [];
+                shoppingList = [];
+                budget = 0;
+                localStorage.clear();
+                document.getElementById('current-budget').textContent = '0';
+                renderExpenses();
+                renderTodos();
+                renderShoppingList();
+                showPrompt('All data cleared successfully!');
+            }
+        }
+
+        // Expense and Income Tracker
+        let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
+        let incomes = JSON.parse(localStorage.getItem('incomes')) || [];
+        let budget = parseFloat(localStorage.getItem('budget')) || 0;
+        let expenseSortDirection = 'desc';
+
+        // Sanitize data on load
+        expenses = expenses.filter(e => e && e.desc && typeof e.desc === 'string' && isValidDate(e.date));
+        incomes = incomes.filter(i => i && i.desc && typeof i.desc === 'string' && isValidDate(i.date));
+        localStorage.setItem('expenses', JSON.stringify(expenses));
+        localStorage.setItem('incomes', JSON.stringify(incomes));
+        document.getElementById('current-budget').textContent = budget.toFixed(2);
+
+        function setBudget() {
+            budget = parseFloat(document.getElementById('monthly-budget').value) || 0;
+            localStorage.setItem('budget', budget);
+            document.getElementById('current-budget').textContent = budget.toFixed(2);
+            checkBudget();
+            showPrompt(`Budget set to NRs ${budget.toFixed(2)}!`);
+        }
+
+        function checkBudget(totalExpenses) {
+            if (budget > 0 && totalExpenses > budget) {
+                showPrompt(`Warning: Exceeded budget of NRs ${budget}! Expenses: NRs ${totalExpenses}`, 'error');
+            } else if (budget > 0 && totalExpenses >= budget * 0.9) {
+                showPrompt(`Alert: Nearing budget of NRs ${budget}! Expenses: NRs ${totalExpenses}`, 'error');
+            }
+        }
+
+        function handleExpenseSubmit() {
+            const desc = document.getElementById('expense-desc').value;
+            const amount = parseFloat(document.getElementById('expense-amount').value);
+            const date = document.getElementById('expense-date').value;
+            const editIndex = parseInt(document.getElementById('expense-edit-index').value);
+
+            if (desc && amount && isValidDate(date)) {
+                if (editIndex === -1) {
+                    expenses.push({ desc, amount, date });
+                    showPrompt('Expense added successfully!');
+                } else {
+                    expenses[editIndex] = { desc, amount, date };
+                    showPrompt('Expense updated successfully!');
+                }
+                localStorage.setItem('expenses', JSON.stringify(expenses));
+                renderExpenses();
+                resetForms();
+            } else {
+                showPrompt('Please fill all fields with valid data.', 'error');
+            }
+        }
+
+        function editExpense(index) {
+            const expense = expenses[index];
+            document.getElementById('expense-desc').value = expense.desc;
+            document.getElementById('expense-amount').value = expense.amount;
+            document.getElementById('expense-date').value = expense.date;
+            document.getElementById('expense-btn').textContent = 'Update Expense';
+            document.getElementById('expense-edit-index').value = index;
+        }
+
+        function handleIncomeSubmit() {
+            const desc = document.getElementById('income-desc').value;
+            const amount = parseFloat(document.getElementById('income-amount').value);
+            const date = document.getElementById('income-date').value;
+            const editIndex = parseInt(document.getElementById('income-edit-index').value);
+
+            if (desc && amount && isValidDate(date)) {
+                if (editIndex === -1) {
+                    incomes.push({ desc, amount, date });
+                    showPrompt('Income added successfully!');
+                } else {
+                    incomes[editIndex] = { desc, amount, date };
+                    showPrompt('Income updated successfully!');
+                }
+                localStorage.setItem('incomes', JSON.stringify(incomes));
+                renderExpenses();
+                resetForms();
+            } else {
+                showPrompt('Please fill all fields with valid data.', 'error');
+            }
+        }
+
+        function editIncome(index) {
+            const income = incomes[index];
+            document.getElementById('income-desc').value = income.desc;
+            document.getElementById('income-amount').value = income.amount;
+            document.getElementById('income-date').value = income.date;
+            document.getElementById('income-btn').textContent = 'Update Income';
+            document.getElementById('income-edit-index').value = index;
+        }
+
+        function deleteExpense(index) {
+            expenses.splice(index, 1);
+            localStorage.setItem('expenses', JSON.stringify(expenses));
+            renderExpenses();
+            showPrompt('Expense deleted successfully!');
+        }
+
+        function deleteIncome(index) {
+            incomes.splice(index, 1);
+            localStorage.setItem('incomes', JSON.stringify(incomes));
+            renderExpenses();
+            showPrompt('Income deleted successfully!');
+        }
+
+        function sortExpensesByDate() {
+            expenseSortDirection = expenseSortDirection === 'desc' ? 'asc' : 'desc';
+            document.getElementById('expense-sort-date').textContent = `Sort by Date ${expenseSortDirection === 'desc' ? '↓' : '↑'}`;
+            renderExpenses();
+        }
+
+        function renderExpenses() {
+            const searchTerm = document.getElementById('expense-search').value.toLowerCase();
+            const filterType = document.getElementById('expense-filter').value;
+            const table = document.getElementById('expense-table');
+            table.innerHTML = '';
+            let totalExpenses = 0;
+            let totalIncome = 0;
+
+            const filteredExpenses = expenses.filter(exp => 
+                exp && exp.desc && typeof exp.desc === 'string' && exp.desc.toLowerCase().includes(searchTerm) && 
+                (filterType === 'all' || filterType === 'expense')
+            );
+            const filteredIncomes = incomes.filter(inc => 
+                inc && inc.desc && typeof inc.desc === 'string' && inc.desc.toLowerCase().includes(searchTerm) && 
+                (filterType === 'all' || filterType === 'income')
+            );
+
+            const allItems = [...filteredExpenses.map(item => ({ ...item, type: 'Expense' })), ...filteredIncomes.map(item => ({ ...item, type: 'Income' }))];
+            allItems.sort((a, b) => {
+                const dateA = new Date(a.date);
+                const dateB = new Date(b.date);
+                return expenseSortDirection === 'desc' ? dateB - dateA : dateA - dateB;
+            });
+
+            allItems.forEach((item, index) => {
+                const isExpense = item.type === 'Expense';
+                if (isExpense) {
+                    totalExpenses += item.amount;
+                } else {
+                    totalIncome += item.amount;
+                }
+                const originalIndex = isExpense ? expenses.indexOf(filteredExpenses.find(exp => exp.desc === item.desc && exp.date === item.date)) : incomes.indexOf(filteredIncomes.find(inc => inc.desc === item.desc && inc.date === item.date));
+
+                const tr = document.createElement('tr');
+                const typeTd = document.createElement('td');
+                typeTd.textContent = sanitizeHTML(item.type);
+                const descTd = document.createElement('td');
+                descTd.textContent = sanitizeHTML(item.desc);
+                const amountTd = document.createElement('td');
+                amountTd.textContent = `NRs ${item.amount.toFixed(2)}`;
+                const dateTd = document.createElement('td');
+                dateTd.textContent = sanitizeHTML(item.date);
+                const actionTd = document.createElement('td');
+
+                const editButton = document.createElement('button');
+                editButton.textContent = 'Edit';
+                editButton.className = 'bg-yellow';
+                editButton.onclick = () => isExpense ? editExpense(originalIndex) : editIncome(originalIndex);
+
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.className = 'bg-red';
+                deleteButton.onclick = () => isExpense ? deleteExpense(originalIndex) : deleteIncome(originalIndex);
+
+                actionTd.appendChild(editButton);
+                actionTd.appendChild(deleteButton);
+
+                tr.appendChild(typeTd);
+                tr.appendChild(descTd);
+                tr.appendChild(amountTd);
+                tr.appendChild(dateTd);
+                tr.appendChild(actionTd);
+                table.appendChild(tr);
+            });
+
+            document.getElementById('expense-total').textContent = totalExpenses.toFixed(2);
+            document.getElementById('income-total').textContent = totalIncome.toFixed(2);
+            document.getElementById('balance').textContent = (totalIncome - totalExpenses).toFixed(2);
+            checkBudget(totalExpenses);
+        }
+
+        document.getElementById('expense-search').addEventListener('input', renderExpenses);
+        document.getElementById('expense-filter').addEventListener('change', renderExpenses);
+
+        // To-Do List
+        let todos = JSON.parse(localStorage.getItem('todos')) || [];
+        let todoSortDirection = 'desc';
+
+        // Sanitize todos on load
+        todos = todos.filter(t => t && t.task && typeof t.task === 'string' && typeof t.completed === 'boolean' && isValidDate(t.date) && ['Personal', 'Work', 'Urgent'].includes(t.category) && ['Low', 'Medium', 'High'].includes(t.priority));
+        localStorage.setItem('todos', JSON.stringify(todos));
+
+        // Request Notification Permission
+        if (Notification.permission !== "granted") {
+            Notification.requestPermission();
+        }
+
+        function checkReminders() {
+            const now = new Date();
+            todos.forEach((todo, index) => {
+                if (todo.reminder && !todo.completed) {
+                    const reminderTime = new Date(todo.reminder);
+                    const timeDiff = reminderTime - now;
+                    if (timeDiff <= 5 * 60 * 1000 && timeDiff >= 0) {
+                        new Notification(`Upcoming Reminder: ${todo.task}`, {
+                            body: `Due on ${todo.date} at ${reminderTime.toLocaleTimeString()}.`,
+                        });
+                    } else if (now >= reminderTime && now - reminderTime < 60000) {
+                        new Notification(`Task Reminder: ${todo.task}`, {
+                            body: `Due on ${todo.date}. Click to view.`,
+                        });
+                        todo.reminder = null;
+                        localStorage.setItem('todos', JSON.stringify(todos));
+                    }
+                }
+            });
+        }
+        setInterval(checkReminders, 60000);
+
+        function handleTodoSubmit() {
+            const task = document.getElementById('todo-task').value;
+            const completed = document.getElementById('todo-completed').checked;
+            const date = document.getElementById('todo-date').value;
+            const reminder = document.getElementById('todo-reminder').value || null;
+            const category = document.getElementById('todo-category').value;
+            const priority = document.getElementById('todo-priority').value;
+            const editIndex = parseInt(document.getElementById('todo-edit-index').value);
+
+            if (task && isValidDate(date)) {
+                const todo = { task, completed, date, reminder, category, priority };
+                if (editIndex === -1) {
+                    todos.push(todo);
+                    showPrompt('Task added successfully!');
+                } else {
+                    todos[editIndex] = todo;
+                    showPrompt('Task updated successfully!');
+                }
+                localStorage.setItem('todos', JSON.stringify(todos));
+                renderTodos();
+                resetForms();
+            } else {
+                showPrompt('Please fill all fields with valid data.', 'error');
+            }
+        }
+
+        function toggleTodoCompleted(index) {
+            todos[index].completed = !todos[index].completed;
+            localStorage.setItem('todos', JSON.stringify(todos));
+            renderTodos();
+            showPrompt(todos[index].completed ? 'Task marked as completed!' : 'Task marked as incomplete!');
+        }
+
+        function addTodoToShoppingList(index) {
+            const todo = todos[index];
+            if (!todo.completed) {
+                showPrompt('Please mark the task as completed first.', 'error');
+                return;
+            }
+            shoppingList.push({
+                item: todo.task,
+                date: todo.date,
+                completed: false,
+                category: todo.category,
+                priority: todo.priority
+            });
+            localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+            renderShoppingList();
+            showPrompt(`"${todo.task}" added to shopping list!`);
+        }
+
+        function editTodo(index) {
+            const todo = todos[index];
+            document.getElementById('todo-task').value = todo.task;
+            document.getElementById('todo-completed').checked = todo.completed;
+            document.getElementById('todo-date').value = todo.date;
+            document.getElementById('todo-reminder').value = todo.reminder || '';
+            document.getElementById('todo-category').value = todo.category;
+            document.getElementById('todo-priority').value = todo.priority;
+            document.getElementById('todo-btn').textContent = 'Update Task';
+            document.getElementById('todo-edit-index').value = index;
+        }
+
+        function deleteTodo(index) {
+            todos.splice(index, 1);
+            localStorage.setItem('todos', JSON.stringify(todos));
+            renderTodos();
+            showPrompt('Task deleted successfully!');
+        }
+
+        function sortTodosByDate() {
+            todoSortDirection = todoSortDirection === 'desc' ? 'asc' : 'desc';
+            document.getElementById('todo-sort-date').textContent = `Sort by Date ${todoSortDirection === 'desc' ? '↓' : '↑'}`;
+            renderTodos();
+        }
+
+        function renderTodos() {
+            const searchTerm = document.getElementById('todo-search').value.toLowerCase();
+            const filterCategory = document.getElementById('todo-filter-category').value;
+            const filterPriority = document.getElementById('todo-filter-priority').value;
+            const filterCompleted = document.getElementById('todo-filter-completed').value;
+            const table = document.getElementById('todo-table');
+            table.innerHTML = '';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const filteredTodos = todos.filter(todo => {
+                const matchesSearch = todo && todo.task && typeof todo.task === 'string' && todo.task.toLowerCase().includes(searchTerm);
+                const matchesCategory = filterCategory === 'all' || todo.category === filterCategory;
+                const matchesPriority = filterPriority === 'all' || todo.priority === filterPriority;
+                const matchesCompleted = filterCompleted === 'all' ||
+                                         (filterCompleted === 'completed' && todo.completed) ||
+                                         (filterCompleted === 'incomplete' && !todo.completed);
+                return matchesSearch && matchesCategory && matchesPriority && matchesCompleted;
+            });
+
+            filteredTodos.sort((a, b) => {
+                const dateA = new Date(a.date);
+                const dateB = new Date(b.date);
+                return todoSortDirection === 'desc' ? dateB - dateA : dateA - dateB;
+            });
+
+            filteredTodos.forEach((todo, index) => {
+                const todoDate = new Date(todo.date);
+                todoDate.setHours(0, 0, 0, 0);
+                let dateClass = '';
+                if (!todo.completed) {
+                    if (todoDate < today) {
+                        dateClass = 'date-past';
+                    } else if (todoDate.getTime() === today.getTime()) {
+                        dateClass = 'date-today';
+                    }
+                }
+                const priorityClass = `priority-${todo.priority.toLowerCase()}`;
+
+                const tr = document.createElement('tr');
+                const taskTd = document.createElement('td');
+                taskTd.textContent = sanitizeHTML(todo.task);
+                if (todo.completed) taskTd.className = 'completed';
+                const dateTd = document.createElement('td');
+                dateTd.textContent = sanitizeHTML(todo.date);
+                dateTd.className = dateClass;
+                const reminderTd = document.createElement('td');
+                reminderTd.textContent = todo.reminder ? sanitizeHTML(todo.reminder) : 'None';
+                const categoryTd = document.createElement('td');
+                categoryTd.textContent = sanitizeHTML(todo.category);
+                const priorityTd = document.createElement('td');
+                priorityTd.textContent = sanitizeHTML(todo.priority);
+                priorityTd.className = priorityClass;
+                const completedTd = document.createElement('td');
+                const completedCheckbox = document.createElement('input');
+                completedCheckbox.type = 'checkbox';
+                completedCheckbox.checked = todo.completed;
+                completedCheckbox.onclick = () => toggleTodoCompleted(index);
+                completedTd.appendChild(completedCheckbox);
+                const actionTd = document.createElement('td');
+
+                const editButton = document.createElement('button');
+                editButton.textContent = 'Edit';
+                editButton.className = 'bg-yellow';
+                editButton.onclick = () => editTodo(index);
+
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.className = 'bg-red';
+                deleteButton.onclick = () => deleteTodo(index);
+
+                const addToShoppingButton = document.createElement('button');
+                addToShoppingButton.textContent = 'Add to Shopping';
+                addToShoppingButton.className = 'bg-green';
+                addToShoppingButton.onclick = () => addTodoToShoppingList(index);
+
+                actionTd.appendChild(editButton);
+                actionTd.appendChild(deleteButton);
+                actionTd.appendChild(addToShoppingButton);
+
+                tr.appendChild(taskTd);
+                tr.appendChild(dateTd);
+                tr.appendChild(reminderTd);
+                tr.appendChild(categoryTd);
+                tr.appendChild(priorityTd);
+                tr.appendChild(completedTd);
+                tr.appendChild(actionTd);
+                table.appendChild(tr);
+            });
+        }
+
+        document.getElementById('todo-search').addEventListener('input', renderTodos);
+        document.getElementById('todo-filter-category').addEventListener('change', renderTodos);
+        document.getElementById('todo-filter-priority').addEventListener('change', renderTodos);
+        document.getElementById('todo-filter-completed').addEventListener('change', renderTodos);
+
+        // Shopping List
+        let shoppingList = JSON.parse(localStorage.getItem('shoppingList')) || [];
+        let shoppingSortDirection = 'desc';
+
+        // Sanitize shoppingList on load
+        shoppingList = shoppingList.filter(s => s && s.item && typeof s.item === 'string' && isValidDate(s.date) && typeof s.completed === 'boolean' && ['Personal', 'Work', 'Urgent'].includes(s.category) && ['Low', 'Medium', 'High'].includes(s.priority));
+        localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+
+        function handleShoppingSubmit() {
+            const item = document.getElementById('shopping-item').value;
+            const date = document.getElementById('shopping-date').value;
+            const category = document.getElementById('shopping-category').value;
+            const priority = document.getElementById('shopping-priority').value;
+            const editIndex = parseInt(document.getElementById('shopping-edit-index').value);
+
+            if (item && isValidDate(date)) {
+                if (editIndex === -1) {
+                    shoppingList.push({ item, date, completed: false, category, priority });
+                    showPrompt('Shopping item added successfully!');
+                } else {
+                    const wasCompleted = shoppingList[editIndex].completed;
+                    shoppingList[editIndex] = { item, date, completed: wasCompleted, category, priority };
+                    showPrompt('Shopping item updated successfully!');
+                }
+                localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+                renderShoppingList();
+                resetForms();
+            } else {
+                showPrompt('Please fill all fields with valid data.', 'error');
+            }
+        }
+
+        function editShoppingItem(index) {
+            const item = shoppingList[index];
+            document.getElementById('shopping-item').value = item.item;
+            document.getElementById('shopping-date').value = item.date;
+            document.getElementById('shopping-category').value = item.category;
+            document.getElementById('shopping-priority').value = item.priority;
+            document.getElementById('shopping-btn').textContent = 'Update Item';
+            document.getElementById('shopping-edit-index').value = index;
+        }
+
+        function toggleShoppingCompleted(index) {
+            const item = shoppingList[index];
+            item.completed = !item.completed;
+            if (item.completed) {
+                const price = prompt(`Enter the price for "${item.item}" (NRs):`);
+                if (price !== null) {
+                    const amount = parseFloat(price);
+                    if (!isNaN(amount) && amount > 0) {
+                        expenses.push({
+                            desc: item.item,
+                            amount: amount,
+                            date: item.date
+                        });
+                        localStorage.setItem('expenses', JSON.stringify(expenses));
+                        renderExpenses();
+                        showPrompt(`"${item.item}" marked as completed and added to expenses!`);
+                    } else {
+                        showPrompt('Please enter a valid positive number for the price.', 'error');
+                        item.completed = false;
+                    }
+                } else {
+                    item.completed = false;
+                    showPrompt('Action cancelled.', 'error');
+                }
+            } else {
+                showPrompt(`"${item.item}" marked as incomplete!`);
+            }
+            localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+            renderShoppingList();
+        }
+
+        function deleteShoppingItem(index) {
+            shoppingList.splice(index, 1);
+            localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+            renderShoppingList();
+            showPrompt('Shopping item deleted successfully!');
+        }
+
+        function sortShoppingByDate() {
+            shoppingSortDirection = shoppingSortDirection === 'desc' ? 'asc' : 'desc';
+            document.getElementById('shopping-sort-date').textContent = `Sort by Date ${shoppingSortDirection === 'desc' ? '↓' : '↑'}`;
+            renderShoppingList();
+        }
+
+        function renderShoppingList() {
+            const searchTerm = document.getElementById('shopping-search').value.toLowerCase();
+            const filterCategory = document.getElementById('shopping-filter-category').value;
+            const filterPriority = document.getElementById('shopping-filter-priority').value;
+            const filterCompleted = document.getElementById('shopping-filter-completed').value;
+            const table = document.getElementById('shopping-table');
+            table.innerHTML = '';
+
+            const filteredItems = shoppingList.filter(item => {
+                const matchesSearch = item && item.item && typeof item.item === 'string' && item.item.toLowerCase().includes(searchTerm);
+                const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
+                const matchesPriority = filterPriority === 'all' || item.priority === filterPriority;
+                const matchesCompleted = filterCompleted === 'all' ||
+                                         (filterCompleted === 'completed' && item.completed) ||
+                                         (filterCompleted === 'incomplete' && !item.completed);
+                return matchesSearch && matchesCategory && matchesPriority && matchesCompleted;
+            });
+
+            filteredItems.sort((a, b) => {
+                const dateA = new Date(a.date);
+                const dateB = new Date(b.date);
+                return shoppingSortDirection === 'desc' ? dateB - dateA : dateA - dateB;
+            });
+
+            let totalItems = filteredItems.length;
+            let completedItems = filteredItems.filter(item => item.completed).length;
+
+            filteredItems.forEach((item, index) => {
+                const priorityClass = `priority-${item.priority.toLowerCase()}`;
+
+                const tr = document.createElement('tr');
+                const itemTd = document.createElement('td');
+                itemTd.textContent = sanitizeHTML(item.item);
+                if (item.completed) itemTd.className = 'completed';
+                const dateTd = document.createElement('td');
+                dateTd.textContent = sanitizeHTML(item.date);
+                const categoryTd = document.createElement('td');
+                categoryTd.textContent = sanitizeHTML(item.category);
+                const priorityTd = document.createElement('td');
+                priorityTd.textContent = sanitizeHTML(item.priority);
+                priorityTd.className = priorityClass;
+                const completedTd = document.createElement('td');
+                const completedCheckbox = document.createElement('input');
+                completedCheckbox.type = 'checkbox';
+                completedCheckbox.checked = item.completed;
+                completedCheckbox.onclick = () => toggleShoppingCompleted(index);
+                completedTd.appendChild(completedCheckbox);
+                const actionTd = document.createElement('td');
+
+                const editButton = document.createElement('button');
+                editButton.textContent = 'Edit';
+                editButton.className = 'bg-yellow';
+                editButton.onclick = () => editShoppingItem(index);
+
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.className = 'bg-red';
+                deleteButton.onclick = () => deleteShoppingItem(index);
+
+                actionTd.appendChild(editButton);
+                actionTd.appendChild(deleteButton);
+
+                tr.appendChild(itemTd);
+                tr.appendChild(dateTd);
+                tr.appendChild(categoryTd);
+                tr.appendChild(priorityTd);
+                tr.appendChild(completedTd);
+                tr.appendChild(actionTd);
+                table.appendChild(tr);
+            });
+
+            document.getElementById('shopping-total').textContent = totalItems;
+            document.getElementById('shopping-completed').textContent = completedItems;
+        }
+
+        document.getElementById('shopping-search').addEventListener('input', renderShoppingList);
+        document.getElementById('shopping-filter-category').addEventListener('change', renderShoppingList);
+        document.getElementById('shopping-filter-priority').addEventListener('change', renderShoppingList);
+        document.getElementById('shopping-filter-completed').addEventListener('change', renderShoppingList);
+
+        // Initial Render
+        renderExpenses();
+        renderTodos();
+        renderShoppingList();
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93a89755fbffb0e8',t:'MTc0NjM2NzkyNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+</body>
+</html>
